@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generador Video IA 🎬</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #000;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      overflow: hidden;
+    }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 10px;
+    }
+    textarea {
+      width: 90%;
+      max-width: 600px;
+      height: 100px;
+      margin-bottom: 10px;
+      border-radius: 8px;
+      border: none;
+      padding: 10px;
+      font-size: 1rem;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #00b4d8;
+      color: white;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #0096c7;
+    }
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎬 Generador de Video IA</h1>
+  <textarea id="prompt" placeholder="Escribe aquí tu texto para narrar y generar el video..."></textarea><br/>
+  <button id="startBtn">🎥 Generar Video</button>
+
+  <canvas id="canvas" width="1280" height="720"></canvas>
+
+  <script>
+    const btn = document.getElementById("startBtn");
+    const promptInput = document.getElementById("prompt");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+
+    let animFrame, gradientStep = 0;
+
+    function drawBackground() {
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, `hsl(${(gradientStep) % 360}, 80%, 40%)`);
+      gradient.addColorStop(1, `hsl(${(gradientStep + 60) % 360}, 80%, 40%)`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      gradientStep += 0.5;
+      animFrame = requestAnimationFrame(drawBackground);
+    }
+
+    function splitText(text) {
+      return text.match(/[^.!?]+[.!?]*/g) || [text];
+    }
+
+    btn.addEventListener("click", async () => {
+      const text = promptInput.value.trim();
+      if (!text) {
+        alert("Por favor, escribe un texto primero.");
+        return;
+      }
+
+      btn.disabled = true;
+      const sentences = splitText(text);
+      const synth = window.speechSynthesis;
+      const utterances = sentences.map(sentence => {
+        const u = new SpeechSynthesisUtterance(sentence);
+        u.lang = "es-ES";
+        u.rate = 1;
+        u.pitch = 1;
+        return u;
+      });
+
+      const stream = canvas.captureStream(30);
+      const audioCtx = new AudioContext();
+      const dest = audioCtx.createMediaStreamDestination();
+      const source = audioCtx.createMediaStreamSource(dest.stream);
+      stream.addTrack(dest.stream.getAudioTracks()[0]);
+
+      const chunks = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = e => {
+        cancelAnimationFrame(animFrame);
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "video_generado.webm";
+        a.click();
+        btn.disabled = false;
+      };
+
+      recorder.start();
+      drawBackground();
+
+      let totalDuration = 0;
+      for (const u of utterances) {
+        await new Promise(resolve => {
+          u.onend = resolve;
+          synth.speak(u);
+        });
+      }
+
+      setTimeout(() => {
+        recorder.stop();
+      }, totalDuration + 500);
+    });
+  </script>
+</body>
+</html>
